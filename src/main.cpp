@@ -86,6 +86,9 @@ public:
 		double len = sqrt(pow(x1-x0, 2) + pow(y1-y0, 2));
 
 		int n = len/20;
+		if(n == 0) {
+			n = 1;
+		}
 
 		double x = x0;
 		double y = y0;
