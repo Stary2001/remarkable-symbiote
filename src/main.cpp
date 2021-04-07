@@ -84,7 +84,6 @@ public:
 
 	void draw_dashed_line(int x0, int y0, int x1, int y1, int width, remarkable_color color) {
 		double len = sqrt(pow(x1-x0, 2) + pow(y1-y0, 2));
-		printf("len: %0.2f\n", len);
 
 		int n = len/20;
 
@@ -313,14 +312,16 @@ public:
 		for(Stroke &stroke: shape_strokes) {
 			pen_clear();
 			
-			printf("point count: %i\n", stroke.getPointCount());
+			//printf("drawing stroke with %i points\n", stroke.getPointCount());
 			Point last_p = stroke.getPoint(0);
 			pen_down(last_p.x, last_p.y, 2);
 			for(int i = 1; i < stroke.getPointCount(); i++) {
 				Point p = stroke.getPoint(i);
 				double len = sqrt(pow(p.x-last_p.x, 2) + pow(p.y-last_p.y, 2));
-				int n_points = len/2;
-				pen_move(last_p.x, last_p.y, p.x, p.y, 150);
+				// keep each segment roughly the same length
+				// TODO: maybe change this to fall off at larger lengths later
+				int n_points = (int)len;
+				pen_move(last_p.x, last_p.y, p.x, p.y, n_points);
 
 				last_p = p;
 			}
