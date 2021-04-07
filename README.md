@@ -11,3 +11,7 @@ Otherwise, just running `make` will use the locally installed toolchain, and out
 
 # Using
 Currently there is literally no UI - run it via SSH, draw something, then tap anywhere to stop and draw out the shapes.
+
+# Acknowledgements
+* [rmkit](https://rmkit.dev) - a light library that handles most of the things I want to deal with
+* [iago](https://rmkit.dev/apps/iago)/[lamp](https://rmkit.dev/apps/lamp) from rmkit - reference on how to fake input events, inspiration
