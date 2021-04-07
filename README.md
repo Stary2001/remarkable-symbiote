@@ -1,6 +1,7 @@
 # What is this?
 An attempt at shape recognition for the reMarkable tablet. It's pretty rough around the edges, so it won't win any user experience awards any time soon.  
-Currently, the shape recognizer from [Xournal++](https://github.com/xournalpp/xournalpp/) is used - it operates on stroke data directly instead of trying to use bitmap recognition.  
+Currently, the shape recognizer from [Xournal++](https://github.com/xournalpp/xournalpp/) is used - it operates on stroke data directly instead of trying to use bitmap recognition. You can see a description of how it works [here](https://sourceforge.net/p/xournal/support-requests/6/#64c7).
+
 Eventually I might write my own shape recognizer...
 
 # Building
