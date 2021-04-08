@@ -7,6 +7,7 @@
 
 #include "Inertia.h"
 #include "ShapeRecognizerConfig.h"
+#include "ShapeRecognizerResult.h"
 
 /**
  * Create circle stroke for inertia
@@ -57,7 +58,7 @@ auto CircleRecognizer::scoreCircle(Stroke* s, Inertia& inertia) -> double {
     return sum / (divisor);
 }
 
-auto CircleRecognizer::recognize(Stroke* stroke) -> Stroke* {
+auto CircleRecognizer::recognize(Stroke* stroke, ShapeData **data) -> Stroke* {
     Inertia s;
     s.calc(stroke->getPoints(), 0, stroke->getPointCount());
     RDEBUG("Mass=%.0f, Center=(%.1f,%.1f), I=(%.0f,%.0f, %.0f), Rad=%.2f, Det=%.4f", s.getMass(), s.centerX(),
@@ -67,6 +68,7 @@ auto CircleRecognizer::recognize(Stroke* stroke) -> Stroke* {
         double score = CircleRecognizer::scoreCircle(stroke, s);
         RDEBUG("Circle score: %.2f", score);
         if (score < CIRCLE_MAX_SCORE) {
+            *data = new CircleData(s.centerX(), s.centerY(), s.rad());
             return CircleRecognizer::makeCircleShape(stroke, s);
         }
     }

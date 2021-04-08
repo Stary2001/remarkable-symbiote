@@ -20,6 +20,7 @@
 class Stroke;
 class Point;
 class ShapeRecognizerResult;
+struct ShapeData;
 
 class ShapeRecognizer {
 public:
@@ -30,9 +31,9 @@ public:
     void resetRecognizer();
 
 private:
-    Stroke* tryRectangle();
-    Stroke* tryArrow(); 
-    Stroke* tryClosedPolygon(int nsides);
+    Stroke* tryRectangle(ShapeData **data);
+    Stroke* tryArrow(ShapeData **data);
+    Stroke* tryClosedPolygon(int nsides, ShapeData **data);
 
     static void optimizePolygonal(const Point* pt, int nsides, int* breaks, Inertia* ss);
 

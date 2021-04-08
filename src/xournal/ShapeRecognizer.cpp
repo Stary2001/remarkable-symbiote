@@ -27,7 +27,7 @@ void ShapeRecognizer::resetRecognizer() {
 /**
  *  Test if segments form standard shapes
  */
-auto ShapeRecognizer::tryRectangle() -> Stroke* {
+auto ShapeRecognizer::tryRectangle(ShapeData **data) -> Stroke* {
     // first, we need whole strokes to combine to 4 segments...
     if (this->queueLength < 4) {
         return nullptr;
@@ -238,7 +238,7 @@ void ShapeRecognizer::optimizePolygonal(const Point* pt, int nsides, int* breaks
     }
 }
 
-Stroke* ShapeRecognizer::tryClosedPolygon(int nsides)
+Stroke* ShapeRecognizer::tryClosedPolygon(int nsides, ShapeData **data)
 {
     //XOJ_CHECK_TYPE(ShapeRecognizer);
 
@@ -303,7 +303,7 @@ Stroke* ShapeRecognizer::tryClosedPolygon(int nsides)
     return s;
 }
 
-Stroke* ShapeRecognizer::tryArrow()
+Stroke* ShapeRecognizer::tryArrow(ShapeData **data)
 {
     //XOJ_CHECK_TYPE(ShapeRecognizer);
 
@@ -481,6 +481,7 @@ Stroke* ShapeRecognizer::tryArrow()
  * The main pattern recognition function
  */
 auto ShapeRecognizer::recognizePatterns(Stroke* stroke) -> ShapeRecognizerResult* {
+    ShapeData *data = nullptr;
     this->stroke = stroke;
 
     if (stroke->getPointCount() < 3) {
@@ -526,33 +527,33 @@ auto ShapeRecognizer::recognizePatterns(Stroke* stroke) -> ShapeRecognizerResult
 
         Stroke* tmp = nullptr;
 
-        if ((tmp = tryRectangle()) != nullptr) {
-            auto* result = new ShapeRecognizerResult(tmp, this);
+        if ((tmp = tryRectangle(&data)) != nullptr) {
+            auto* result = new ShapeRecognizerResult(tmp, this, ShapeType::Rectangle, data);
             resetRecognizer();
             RDEBUG("return tryRectangle()");
             return result;
         }
 
         
-              if ((tmp = tryArrow()) != nullptr)
+              if ((tmp = tryArrow(&data)) != nullptr)
               {
-                  ShapeRecognizerResult* result = new ShapeRecognizerResult(tmp, this);
+                  ShapeRecognizerResult* result = new ShapeRecognizerResult(tmp, this, ShapeType::Arrow, nullptr);
                   resetRecognizer();
                   RDEBUG("return tryArrow()");
                   return result;
               }
         
-              if ((tmp = tryClosedPolygon(3)) != nullptr)
+              if ((tmp = tryClosedPolygon(3, &data)) != nullptr)
               {
-                  ShapeRecognizerResult* result = new ShapeRecognizerResult(tmp, this);
+                  ShapeRecognizerResult* result = new ShapeRecognizerResult(tmp, this, ShapeType::Triangle, nullptr);
                   RDEBUG("return tryClosedPolygon(3)");
                   resetRecognizer();
                   return result;
               }
         
-              if ((tmp = tryClosedPolygon(4)) != nullptr)
+              if ((tmp = tryClosedPolygon(4, &data)) != nullptr)
               {
-                  ShapeRecognizerResult* result = new ShapeRecognizerResult(tmp, this);
+                  ShapeRecognizerResult* result = new ShapeRecognizerResult(tmp, this, ShapeType::Quad, nullptr);
                   RDEBUG("return tryClosedPolygon(4)");
                   resetRecognizer();
                   return result;
@@ -578,17 +579,17 @@ auto ShapeRecognizer::recognizePatterns(Stroke* stroke) -> ShapeRecognizerResult
             s->addPoint(Point(rs->x1, rs->y1));
             s->addPoint(Point(rs->x2, rs->y2));
             rs->stroke = s;
-            auto* result = new ShapeRecognizerResult(s);
+            auto* result = new ShapeRecognizerResult(s, ShapeType::Line, nullptr);
             RDEBUG("return line");
             return result;
         }
     }
 
     // not a polygon: maybe a circle ?
-    Stroke* s = CircleRecognizer::recognize(stroke);
+    Stroke* s = CircleRecognizer::recognize(stroke, &data);
     if (s) {
         RDEBUG("return circle");
-        return new ShapeRecognizerResult(s);
+        return new ShapeRecognizerResult(s, ShapeType::Circle, data);
     }
 
     return nullptr;

@@ -13,6 +13,7 @@
 
 class Stroke;
 class Inertia;
+struct ShapeData;
 
 class CircleRecognizer {
 private:
@@ -20,7 +21,7 @@ private:
     virtual ~CircleRecognizer();
 
 public:
-    static Stroke* recognize(Stroke* s);
+    static Stroke* recognize(Stroke* s, ShapeData** data);
 
 private:
     static Stroke* makeCircleShape(Stroke* originalStroke, Inertia& inertia);
