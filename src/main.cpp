@@ -9,6 +9,73 @@
 #include "ShapeRecognizerResult.h"
 #include "Stroke.h"
 
+struct Action {
+	bool is_shape;
+	Stroke stroke;
+
+	void draw_dashed_line(framebuffer::FB *fb, int x0, int y0, int x1, int y1, int width, remarkable_color color) {
+		double len = sqrt(pow(x1-x0, 2) + pow(y1-y0, 2));
+
+		int n = len/20;
+		if(n == 0) {
+			n = 1;
+		}
+
+		double x = x0;
+		double y = y0;
+		double dx = (x1-x0)/n;
+		double dy = (y1-y0)/n;
+
+		for(int j = 0; j < n; j++) {
+			if(j%2 == 0) {
+				fb->draw_line(x, y, x+dx, y+dy, width, color);
+			}
+			x += dx;
+			y += dy;
+		}
+	}
+
+	void draw(framebuffer::FB *fb) {
+		if(is_shape) {
+			// draw dotted
+			if(stroke.getPointCount() < 10) {
+				Point last_p = stroke.getPoint(0);
+				for(int i = 1; i < stroke.getPointCount(); i++) {
+					Point p = stroke.getPoint(i);
+					draw_dashed_line(fb, last_p.x, last_p.y, p.x, p.y, 2, BLACK);
+					last_p = p;
+				}
+			} 
+			else {
+				// draw a dashed circle
+				// lots of segments -> lots of _small_ segments
+
+				// TODO: calculate n from stroke length, this is a bit harder than for straight lines
+				// maybe have recognizer dump circle info?
+				int two_n = 6;
+				int n = 3;
+
+				Point last_p = stroke.getPoint(0);
+				for(int i = 1; i < stroke.getPointCount(); i++) {
+					Point p = stroke.getPoint(i);
+					if(i%two_n < n) {
+						fb->draw_line(last_p.x, last_p.y, p.x, p.y, 2, BLACK);
+					}
+					last_p = p;
+				}
+			}
+		}
+		else {
+			Point last_p = stroke.getPoint(0);
+			for(int i = 1; i < stroke.getPointCount(); i++) {
+				Point p = stroke.getPoint(i);
+				fb->draw_line(last_p.x, last_p.y, p.x, p.y, 2, BLACK);
+				last_p = p;
+			}
+		}
+	}
+};
+
 class AppBackground: public ui::Widget {
   public:
   int byte_size;
@@ -25,7 +92,7 @@ class AppBackground: public ui::Widget {
 		vfb->fbmem = (remarkable_color*) memcpy(vfb->fbmem, fb->fbmem, byte_size);
 	}
 
-	void render(){
+	void render() override {
 		if(rm2fb::IN_RM2FB_SHIM) {
 			fb->waveform_mode = WAVEFORM_MODE_GC16;
 		}
@@ -40,21 +107,34 @@ class AppBackground: public ui::Widget {
 	}
 };
 
+class DrawingArea : public ui::Widget {
+public:
+	DrawingArea(int x, int y, int w, int h): ui::Widget(x, y, w, h) {}
+	std::vector<Action> actions;
+
+	void render() override {
+		for(Action &a: actions) {
+			a.draw(fb);
+		}
+	}
+};
+
 class App {
 public:
 	bool dump_strokes = false;
 	FILE *dump_strokes_file = nullptr;
 
-	bool done = false;
 	bool last_touch = false;
+
 	int last_x = 0;
 	int last_y = 0;
 
 	std::shared_ptr<framebuffer::FB> fb;
-	std::vector<Stroke> strokes;
-	std::vector<Stroke> shape_strokes;
+
 	Stroke current_stroke;
 	std::vector<input_event> pending;
+
+	DrawingArea *area;
 
 	ShapeRecognizer recognizer;
 
@@ -80,6 +160,7 @@ public:
 		fb = framebuffer::get();
 		int w,h;
 		std::tie(w,h) = fb->get_display_size();
+		area = new DrawingArea(0,0,w,h);
 
 		//fb->dither = framebuffer::DITHER::BAYER_2;
 		//fb->waveform_mode = WAVEFORM_MODE_DU;
@@ -88,28 +169,46 @@ public:
 		ui::MainLoop::set_scene(scene);
 		app_bg = new AppBackground(0, 0, w, h);
 		scene->add(app_bg);
+
+		scene->add(area);
+
+		auto style = ui::Stylesheet()
+ 					 .valign(ui::Style::VALIGN::MIDDLE)
+      				 .justify(ui::Style::JUSTIFY::CENTER);
+
+      	auto large_style = style.font_size(48);
+      	
+      	auto h_layout_top = ui::HorizontalLayout(0, 15, w, 50, scene);
+      	auto h_layout_bot = ui::HorizontalLayout(w/8, h-60, w*0.75, 50, scene);
+
+      	auto running_text = new ui::Text(0, 0, 200, 50, "Shapes On");
+      	auto undo_button = new ui::Button(0, 0, 200, 50, "undo");
+      	auto done_button = new ui::Button(0, 0, 200, 50, "done");
+
+      	h_layout_top.pack_center(running_text);
+		h_layout_bot.pack_start(undo_button);
+      	h_layout_bot.pack_end(done_button);
+
+      	running_text->set_style(large_style);
+      	undo_button->set_style(style);
+      	done_button->set_style(style);
+
+      	done_button->mouse.click += PLS_LAMBDA(auto &ev) {
+      		draw_strokes();
+      		exit(0);
+    	};
+
+    	undo_button->mouse.click += PLS_LAMBDA(auto &ev) {
+      		if(area->actions.size() > 0) {
+      			area->actions.pop_back();
+      			ui::MainLoop::full_refresh();
+      		}
+    	};
 	}
 
-	void draw_dashed_line(int x0, int y0, int x1, int y1, int width, remarkable_color color) {
-		double len = sqrt(pow(x1-x0, 2) + pow(y1-y0, 2));
-
-		int n = len/20;
-		if(n == 0) {
-			n = 1;
-		}
-
-		double x = x0;
-		double y = y0;
-		double dx = (x1-x0)/n;
-		double dy = (y1-y0)/n;
-
-		for(int j = 0; j < n; j++) {
-			if(j%2 == 0) {
-				fb->draw_line(x, y, x+dx, y+dy, width, color);
-			}
-			x += dx;
-			y += dy;
-		}
+	~App() {
+		/*delete app_bg;
+		delete area;*/
 	}
 
 	void pen_clear() {
@@ -270,6 +369,7 @@ public:
 
 							fprintf(dump_strokes_file, "\n");
 						}
+						
 						// first, clear out the old line
 						Point last_p = current_stroke.getPoint(0);
 						for(int i=1; i<current_stroke.getPointCount();i++) {
@@ -278,40 +378,14 @@ public:
 							last_p = p;
 						}
 
-						// now draw dotted
-						if(s->getPointCount() < 10) {
-							last_p = s->getPoint(0);
-							for(int i = 1; i < s->getPointCount(); i++) {
-								Point p = s->getPoint(i);
-								draw_dashed_line(last_p.x, last_p.y, p.x, p.y, 2, BLACK);
-								last_p = p;
-							}
-						} 
-						else {
-							// draw a dashed circle
-							// lots of segments -> lots of _small_ segments
-
-							// TODO: calculate n from stroke length, this is a bit harder than for straight lines
-							// maybe have recognizer dump circle info?
-							int two_n = 6;
-							int n = 3;
-
-							last_p = s->getPoint(0);
-							for(int i = 1; i < s->getPointCount(); i++) {
-								Point p = s->getPoint(i);
-								if(i%two_n < n) {
-									fb->draw_line(last_p.x, last_p.y, p.x, p.y, 2, BLACK);
-								}
-								last_p = p;
-							}
-						}
-
-						shape_strokes.push_back(*s);
+						area->actions.push_back(Action {is_shape: true, stroke: *s});
+						area->actions.back().draw(fb.get());
 					} else {
 						if(dump_strokes) {
 							fprintf(dump_strokes_file, "shape none\n");
 						}
-						strokes.push_back(current_stroke);
+
+						area->actions.push_back(Action{ is_shape: false, stroke: current_stroke });
 					}
 					printf("Done with stroke with %i points.\n", current_stroke.getPointCount());
 					current_stroke = Stroke();
@@ -322,7 +396,7 @@ public:
 			last_y = event.y;
 			last_touch = touch;
 		} else {
-			done = true;
+			//done = true;
 		}
 	}
 
@@ -361,6 +435,36 @@ public:
 		ui::MainLoop::in.ungrab();
 	}
 
+	void draw_strokes() {
+		cleanup();
+		start();
+		// we're done, start drawing the shapes we recognized
+		for(Action &a: area->actions) {
+			if(a.is_shape) {
+				pen_clear();
+				
+				//printf("drawing stroke with %i points\n", stroke.getPointCount());
+				Point last_p = a.stroke.getPoint(0);
+				pen_down(last_p.x, last_p.y, 2);
+				for(int i = 1; i < a.stroke.getPointCount(); i++) {
+					Point p = a.stroke.getPoint(i);
+					double len = sqrt(pow(p.x-last_p.x, 2) + pow(p.y-last_p.y, 2));
+					// keep each segment roughly the same length
+					// TODO: maybe change this to fall off at larger lengths later
+					int n_points = (int)len;
+					pen_move(last_p.x, last_p.y, p.x, p.y, n_points);
+
+					last_p = p;
+				}
+				flush_strokes(10);
+
+				pen_up();
+			}
+		}
+
+		stop();
+	}
+
 	void run() {
 		//ui::MainLoop::key_event += PLS_DELEGATE(self.handle_key_event)
 		ui::MainLoop::motion_event += PLS_DELEGATE(handle_motion_event);
@@ -368,38 +472,11 @@ public:
 		ui::MainLoop::in.grab();
 		ui::MainLoop::refresh();
 		ui::MainLoop::redraw();
-		while(!done) {
+		while(true) {
 			ui::MainLoop::main();
 			ui::MainLoop::redraw();
 			ui::MainLoop::read_input();
 		}
-
-		cleanup();
-		start();
-
-		// we're done, start drawing the shapes we recognized
-		for(Stroke &stroke: shape_strokes) {
-			pen_clear();
-			
-			//printf("drawing stroke with %i points\n", stroke.getPointCount());
-			Point last_p = stroke.getPoint(0);
-			pen_down(last_p.x, last_p.y, 2);
-			for(int i = 1; i < stroke.getPointCount(); i++) {
-				Point p = stroke.getPoint(i);
-				double len = sqrt(pow(p.x-last_p.x, 2) + pow(p.y-last_p.y, 2));
-				// keep each segment roughly the same length
-				// TODO: maybe change this to fall off at larger lengths later
-				int n_points = (int)len;
-				pen_move(last_p.x, last_p.y, p.x, p.y, n_points);
-
-				last_p = p;
-			}
-			flush_strokes(10);
-
-			pen_up();
-		}
-
-		stop();
 	}
 };
 
@@ -453,3 +530,7 @@ int main(int argc, char **argv) {
 	app.run();
 	if(stroke_file != nullptr) fclose(stroke_file);
 }
+
+
+// TODO TODO
+// pen strokes that intersect button should not be counted
