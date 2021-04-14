@@ -77,11 +77,11 @@ struct Action {
 };
 
 class AppBackground: public ui::Widget {
-  public:
-  int byte_size;
-  framebuffer::VirtualFB *vfb = NULL;
+public:
+	int byte_size;
+	framebuffer::VirtualFB *vfb = NULL;
 
-  AppBackground(int x, int y, int w, int h): ui::Widget(x, y, w, h) {
+	AppBackground(int x, int y, int w, int h): ui::Widget(x, y, w, h) {
 		byte_size = w*h*sizeof(remarkable_color);
 
 		int fw, fh;
@@ -129,6 +129,8 @@ public:
 	int last_x = 0;
 	int last_y = 0;
 
+	int ignore_height = 0;
+
 	std::shared_ptr<framebuffer::FB> fb;
 
 	Stroke current_stroke;
@@ -148,7 +150,7 @@ public:
 	}
 
 	int get_pen_y(double y){
-	  return round(WACOMHEIGHT - (y / WACOM_Y_SCALAR));
+		return round(WACOMHEIGHT - (y / WACOM_Y_SCALAR));
 	}
 
 	App(FILE *stroke_file) {
@@ -162,8 +164,8 @@ public:
 		std::tie(w,h) = fb->get_display_size();
 		area = new DrawingArea(0,0,w,h);
 
-		//fb->dither = framebuffer::DITHER::BAYER_2;
-		//fb->waveform_mode = WAVEFORM_MODE_DU;
+		fb->dither = framebuffer::DITHER::BAYER_2;
+		fb->waveform_mode = WAVEFORM_MODE_DU;
 
 		auto scene = ui::make_scene();
 		ui::MainLoop::set_scene(scene);
@@ -173,37 +175,39 @@ public:
 		scene->add(area);
 
 		auto style = ui::Stylesheet()
- 					 .valign(ui::Style::VALIGN::MIDDLE)
-      				 .justify(ui::Style::JUSTIFY::CENTER);
+					 .valign(ui::Style::VALIGN::MIDDLE)
+					 .justify(ui::Style::JUSTIFY::CENTER);
 
-      	auto large_style = style.font_size(48);
-      	
-      	auto h_layout_top = ui::HorizontalLayout(0, 15, w, 50, scene);
-      	auto h_layout_bot = ui::HorizontalLayout(w/8, h-60, w*0.75, 50, scene);
+		auto large_style = style.font_size(48);
 
-      	auto running_text = new ui::Text(0, 0, 200, 50, "Shapes On");
-      	auto undo_button = new ui::Button(0, 0, 200, 50, "undo");
-      	auto done_button = new ui::Button(0, 0, 200, 50, "done");
+		auto h_layout_top = ui::HorizontalLayout(0, 15, w, 50, scene);
+		auto h_layout_bot = ui::HorizontalLayout(w/8, h-60, w*0.75, 50, scene);
 
-      	h_layout_top.pack_center(running_text);
+		ignore_height = h-60;
+
+		auto running_text = new ui::Text(0, 0, 200, 50, "Shapes On");
+		auto undo_button = new ui::Button(0, 0, 200, 50, "undo");
+		auto done_button = new ui::Button(0, 0, 200, 50, "done");
+
+		h_layout_top.pack_center(running_text);
 		h_layout_bot.pack_start(undo_button);
-      	h_layout_bot.pack_end(done_button);
+		h_layout_bot.pack_end(done_button);
 
-      	running_text->set_style(large_style);
-      	undo_button->set_style(style);
-      	done_button->set_style(style);
+		running_text->set_style(large_style);
+		undo_button->set_style(style);
+		done_button->set_style(style);
 
-      	done_button->mouse.click += PLS_LAMBDA(auto &ev) {
-      		draw_strokes();
-      		exit(0);
-    	};
+		done_button->mouse.click += PLS_LAMBDA(auto &ev) {
+			draw_strokes();
+			exit(0);
+		};
 
-    	undo_button->mouse.click += PLS_LAMBDA(auto &ev) {
-      		if(area->actions.size() > 0) {
-      			area->actions.pop_back();
-      			ui::MainLoop::full_refresh();
-      		}
-    	};
+		undo_button->mouse.click += PLS_LAMBDA(auto &ev) {
+			if(area->actions.size() > 0) {
+				area->actions.pop_back();
+				ui::MainLoop::full_refresh();
+			}
+		};
 	}
 
 	~App() {
@@ -229,10 +233,10 @@ public:
 	int moves = 0;
 	void pen_move(double x0, double y0, double x1, double y1, int points=10) {
 		double dx = double(x1-x0) / double(points);
-  		double dy = double(y1-y0) / double(points);
+		double dy = double(y1-y0) / double(points);
 
 		pending.push_back(input_event{ type:EV_SYN, code:SYN_REPORT, value:1 });
-	  	for(int i = 0; i <= points; i++) {
+		for(int i = 0; i <= points; i++) {
 			pending.push_back(input_event{ type:EV_ABS, code:ABS_Y, value: get_pen_x(x0 + (i*dx)) });
 			pending.push_back(input_event{ type:EV_ABS, code:ABS_X, value: get_pen_y(y0 + (i*dy)) });
 			pending.push_back(input_event{ type:EV_SYN, code:SYN_REPORT, value:1 });
@@ -328,6 +332,8 @@ public:
 	void handle_motion_event(input::SynMotionEvent &event) {
 		input::WacomEvent *wacom = input::is_wacom_event(event);
 		if(wacom) {
+			if(event.y > ignore_height) return;
+
 			bool touch = wacom->btn_touch == 1;
 			if(touch == last_touch) {
 				if(touch) {
