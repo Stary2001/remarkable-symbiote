@@ -1,5 +1,5 @@
 #include <getopt.h>
-
+#include <sys/wait.h>
 #include <cstddef>
 #include <fstream>
 
@@ -118,6 +118,10 @@ public:
 		}
 	}
 };
+
+
+class App;
+App *global_app = nullptr;
 
 class App {
 public:
@@ -486,6 +490,13 @@ public:
 	}
 };
 
+void catch_sigint(int) {
+	global_app->cleanup();
+	delete global_app;
+
+	exit(0);
+}
+
 int main(int argc, char **argv) {
 	int c;
 	FILE *stroke_file = nullptr;
@@ -532,11 +543,16 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	App app(stroke_file);
-	app.run();
-	if(stroke_file != nullptr) fclose(stroke_file);
+	signal(SIGINT, catch_sigint);
+
+	int _pid = fork();
+	if(_pid) {
+		wait(NULL);
+		ui::MainLoop::in.ungrab();
+	}
+	else {
+		global_app = new App(stroke_file);
+		global_app->run();
+		delete global_app;
+	}
 }
-
-
-// TODO TODO
-// pen strokes that intersect button should not be counted
